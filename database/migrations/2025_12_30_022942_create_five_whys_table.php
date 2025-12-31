@@ -8,21 +8,30 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('rca_five_whys', function (Blueprint $table) {
+        Schema::create('problem_descriptions', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->uuid('complaint_id');
             
-            $table->integer('iteration'); // 1, 2, 3, 4, 5
-            $table->text('question')->nullable();
-            $table->text('answer')->nullable();
+            $table->uuid('complaint_id')->unique(); 
+            
+            $table->string('what')->nullable(); 
+            $table->string('where')->nullable(); 
+            $table->string('when')->nullable(); 
+            $table->string('who')->nullable(); 
+            $table->string('which')->nullable(); 
+            $table->string('how')->nullable(); 
+            
+            $table->text('phenomenon_description')->nullable();
+            $table->text('photos')->nullable(); 
+
             $table->timestamps();
             $table->softDeletes();
+            
             $table->foreign('complaint_id')->references('id')->on('complaints')->onDelete('cascade');
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('rca_five_whys');
+        Schema::dropIfExists('problem_descriptions');
     }
 };
