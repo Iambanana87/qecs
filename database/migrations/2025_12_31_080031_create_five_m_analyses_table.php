@@ -13,23 +13,18 @@ return new class extends Migration
     {
         Schema::create('five_m_analyses', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            
-            $table->uuid('complaint_id')->unique();
+            $table->uuid('complaint_id')->index();
 
-            $table->string('man_code')->nullable();        
-            $table->string('man_cause')->nullable();      
-            $table->boolean('man_confirmed')->default(false);
-            $table->text('man_description')->nullable(); 
+            $table->enum('type', ['Man', 'Machine', 'Method', 'Material', 'Environment']);
 
-            $table->text('machine')->nullable();
-            $table->text('method')->nullable();
-            $table->text('material')->nullable();
-            $table->text('environment')->nullable();
+            $table->string('code')->nullable();
+            $table->text('cause')->nullable();  
+            $table->boolean('confirmed')->default(false);
+            $table->text('description')->nullable();
 
             $table->timestamps();
             $table->softDeletes();
 
-            $table->foreign('complaint_id')->references('id')->on('complaints')->onDelete('cascade');
         });
     }
 

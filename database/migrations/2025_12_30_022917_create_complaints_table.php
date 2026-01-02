@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('complaints', function (Blueprint $table) {
 
             $table->uuid('id')->primary();
-            $table->string('report_number', 50)->unique(); 
+            $table->string('report_number', 50)->nullable()->unique(); 
             $table->uuid('created_by')->nullable(); 
 
             $table->string('subject')->nullable();
