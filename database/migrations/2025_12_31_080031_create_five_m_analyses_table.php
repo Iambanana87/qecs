@@ -13,25 +13,24 @@ return new class extends Migration
     {
         Schema::create('five_m_analyses', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            
-            $table->uuid('complaint_id')->unique();
 
-            $table->string('man_code')->nullable();        
-            $table->string('man_cause')->nullable();      
-            $table->boolean('man_confirmed')->default(false);
-            $table->text('man_description')->nullable(); 
+            $table->uuid('complaint_id');
 
-            $table->text('machine')->nullable();
-            $table->text('method')->nullable();
-            $table->text('material')->nullable();
-            $table->text('environment')->nullable();
+            // MAN | MACHINE | METHOD | MATERIAL | ENVIRONMENT
+            $table->string('type', 20);
+
+            $table->string('code')->nullable();
+            $table->text('cause')->nullable();
+            $table->boolean('confirmed')->default(false);
+            $table->text('description')->nullable();
 
             $table->timestamps();
             $table->softDeletes();
 
-            $table->foreign('complaint_id')->references('id')->on('complaints')->onDelete('cascade');
+            $table->index(['complaint_id', 'type']);
         });
     }
+
 
     /**
      * Reverse the migrations.
