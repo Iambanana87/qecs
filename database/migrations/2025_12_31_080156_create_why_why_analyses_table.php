@@ -30,7 +30,7 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
-            $table->foreign('complaint_id')->references('id')->on('complaints')->onDelete('cascade');
+            
         });
     }
 
