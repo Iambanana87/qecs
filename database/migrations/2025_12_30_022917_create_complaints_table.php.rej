@@ -1,0 +1,9 @@
+diff a/database/migrations/2025_12_30_022917_create_complaints_table.php b/database/migrations/2025_12_30_022917_create_complaints_table.php	(rejected hunks)
+@@ -11,7 +11,6 @@
+         Schema::create('complaints', function (Blueprint $table) {
+ 
+             $table->uuid('id')->primary();
+            $table->string('report_number', 50)->unique(); 
+             $table->string('report_number', 50)->nullable()->unique(); 
+             $table->uuid('created_by')->nullable(); 
+ 

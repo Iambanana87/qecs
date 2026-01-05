@@ -18,13 +18,14 @@ class QueryRouteMiddleware
 
             if (class_exists($controllerClass) && method_exists($controllerClass, $method)) {
                 try {
+                    $parameters = $request->all();
                     // Gọi hàm tương ứng, inject Request nếu cần
-                    return app()->call("{$controllerClass}@{$method}", [
-                        'request' => $request,
-                    ]);
+                    
+                    return app()->call("{$controllerClass}@{$method}", $parameters);
                 } catch (\Throwable $e) {
                     return response()->json([
                         'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
                     ], 500);
                 }
             }

@@ -15,7 +15,6 @@ return new class extends Migration
             $table->uuid('id')->primary();
             
             $table->uuid('complaint_id')->index();
-
             $table->integer('no')->nullable();              
             $table->text('action')->nullable();                
             $table->string('responsible')->nullable();       
@@ -23,8 +22,6 @@ return new class extends Migration
             $table->boolean('verification')->default(false);   
             $table->timestamps();
             $table->softDeletes();
-
-            
         });
     }
 

@@ -2,96 +2,166 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreFiveWhyRequest;
+use App\Http\Requests\UpdateFiveWhyRequest; 
+use App\Http\Resources\FiveWhyResource;
+use App\DTOs\FiveWhyDTO;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Carbon\Carbon;
 
 class FiveWhyController extends Controller
 {
-    protected string $table = 'rca_five_whys';
 
-    /**
-     * Lấy danh sách 5 Why của một Complaint
-     * GET /?c=FiveWhy&m=index&complaint_id={uuid}
-     */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request)
     {
-        $complaintId = $request->query('complaint_id');
-        if (!$complaintId) return response()->json(['message' => 'complaint_id is required'], 422);
+        $query = DB::table('five_whys')->whereNull('deleted_at');
 
-        $data = DB::table($this->table)
-            ->where('complaint_id', $complaintId)
-            ->whereNull('deleted_at')
-            ->orderBy('iteration', 'asc') // Sắp xếp theo thứ tự câu hỏi 1->5
-            ->get();
+        if ($request->has('complaint_id')) {
+            $query->where('complaint_id', $request->query('complaint_id'));
+        }
 
-        return response()->json($data);
+        $paginator = $query->orderBy('created_at', 'desc')->paginate(10);
+
+        $paginator->getCollection()->transform(function ($row) {
+            return FiveWhyDTO::fromDb($row);
+        });
+
+        return FiveWhyResource::collection($paginator);
     }
 
-    /**
-     * Thêm mới hoặc Cập nhật 1 dòng Why
-     * POST /?c=FiveWhy&m=store
-     */
-    public function store(Request $request): JsonResponse
+    public function show(string $id): JsonResponse
     {
-        // 1. Validate
-        $request->validate([
-            'complaint_id' => 'required|exists:complaints,id',
-            'iteration'    => 'required|integer|min:1|max:5', // Chỉ cho phép từ 1 đến 5
-            'question'     => 'nullable|string',
-            'answer'       => 'required|string',
-        ]);
+        $row = $this->findRow($id);
 
-        // 2. Logic: Một complaint chỉ có tối đa 1 dòng cho mỗi iteration (vd: chỉ có 1 câu Why số 3)
-        // Nên ta kiểm tra nếu đã có thì Update, chưa có thì Insert (Upsert)
+        if (!$row) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => new FiveWhyResource(FiveWhyDTO::fromDb($row)),
+        ]);
+    }
+
+    public function store(StoreFiveWhyRequest $request): JsonResponse
+    {
+
+        $dto = $this->handleUpsert($request->validated());
+        return response()->json([
+            'success' => true,
+            'data' => new FiveWhyResource($dto),
+        ], 201);
+    }
+
+    public function update(UpdateFiveWhyRequest $request, string $id): JsonResponse
+    {
+        $row = $this->findRow($id);
+        if (!$row) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+
+        $data = $request->validated();
         
-        $existing = DB::table($this->table)
-            ->where('complaint_id', $request->complaint_id)
-            ->where('iteration', $request->iteration)
+        // Chuẩn bị dữ liệu update
+        $updateData = [
+            'updated_at' => now(),
+        ];
+
+        // Map các trường dữ liệu (chỉ update cái nào có gửi lên)
+        $fields = ['what', 'where', 'when', 'who', 'which', 'how', 'phenomenon_description'];
+        foreach ($fields as $field) {
+            if (array_key_exists($field, $data)) {
+                $updateData[$field] = $data[$field];
+            }
+        }
+
+        // Xử lý riêng trường photos (Json encode)
+        if (array_key_exists('photos', $data)) {
+            $updateData['photos'] = !empty($data['photos']) ? json_encode($data['photos']) : null;
+        }
+
+        DB::table('five_whys')->where('id', $id)->update($updateData);
+
+        // Lấy lại dữ liệu mới nhất
+        $updatedRow = $this->findRow($id);
+
+        return response()->json([
+            'success' => true,
+            'data' => new FiveWhyResource(FiveWhyDTO::fromDb($updatedRow)),
+        ]);
+    }
+
+
+    public function destroy(string $id): JsonResponse
+    {
+        $row = $this->findRow($id);
+
+        if (!$row) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+
+        // Thực hiện Soft Delete (Update deleted_at)
+        DB::table('five_whys')
+            ->where('id', $id)
+            ->update(['deleted_at' => now()]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Deleted successfully',
+        ]);
+    }
+
+    // --- Helpers ---
+
+    /**
+     * Helper tìm row và check soft delete
+     */
+    private function findRow(string $id)
+    {
+        return DB::table('five_whys')
+            ->where('id', $id)
+            ->whereNull('deleted_at')
+            ->first();
+    }
+
+    protected function handleUpsert(array $data): FiveWhyDTO
+    {
+
+        $commonData = [
+            'what' => $data['what'] ?? null,
+            'where' => $data['where'] ?? null,
+            'when' => $data['when'] ?? null,
+            'who' => $data['who'] ?? null,
+            'which' => $data['which'] ?? null,
+            'how' => $data['how'] ?? null,
+            'phenomenon_description' => $data['phenomenon_description'] ?? null,
+            'photos' => isset($data['photos']) ? json_encode($data['photos']) : null,
+            'updated_at' => now(),
+        ];
+
+        $existing = DB::table('five_whys')
+            ->where('complaint_id', $data['complaint_id'])
             ->whereNull('deleted_at')
             ->first();
 
-        $now = Carbon::now();
-
         if ($existing) {
-            // Update
-            DB::table($this->table)
-                ->where('id', $existing->id)
-                ->update([
-                    'question'   => $request->question,
-                    'answer'     => $request->answer,
-                    'updated_at' => $now
-                ]);
-            return response()->json(['message' => 'Updated successfully', 'id' => $existing->id]);
+            DB::table('five_whys')->where('id', $existing->id)->update($commonData);
         } else {
-            // Insert
-            $id = Str::uuid()->toString();
-            DB::table($this->table)->insert([
-                'id'           => $id,
-                'complaint_id' => $request->complaint_id,
-                'iteration'    => $request->iteration,
-                'question'     => $request->question,
-                'answer'       => $request->answer,
-                'created_at'   => $now,
-                'updated_at'   => $now,
-            ]);
-            return response()->json(['message' => 'Created successfully', 'id' => $id]);
+            DB::table('five_whys')->insert(array_merge($commonData, [
+                'id' => (string) Str::uuid(),
+                'complaint_id' => $data['complaint_id'],
+                'created_at' => now(),
+            ]));
         }
-    }
 
-    /**
-     * Xóa 1 dòng Why
-     * DELETE /?c=FiveWhy&m=destroy&id={uuid}
-     */
-    public function destroy(Request $request): JsonResponse
-    {
-        $id = $request->query('id');
-        if (!$id) return response()->json(['message' => 'id is required'], 422);
+        $row = DB::table('five_whys')
+            ->where('complaint_id', $data['complaint_id'])
+            ->whereNull('deleted_at')
+            ->first();
 
-        DB::table($this->table)->where('id', $id)->update(['deleted_at' => Carbon::now()]);
-
-        return response()->json(['message' => 'Deleted successfully']);
+        return FiveWhyDTO::fromDb($row);
     }
 }

@@ -99,7 +99,7 @@ class DatabaseSeeder extends Seeder
             ]);
 
             // 3.2 Insert Problem Description (1-1) - 5W1H
-            DB::table('problem_descriptions')->insert([
+            DB::table('five_whys')->insert([
                 'id' => Str::uuid()->toString(),
                 'complaint_id' => $complaintId,
                 'what' => $faker->sentence,

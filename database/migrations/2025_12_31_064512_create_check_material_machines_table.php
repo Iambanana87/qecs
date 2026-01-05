@@ -23,7 +23,6 @@ return new class extends Migration
             $table->text('description')->nullable();          
             $table->text('current_condition')->nullable();     
             
-            
             $table->text('before_photo')->nullable();          
             $table->text('after_photo')->nullable();           
             
