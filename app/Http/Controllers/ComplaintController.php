@@ -2,266 +2,187 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreComplaintRequest;
+use App\Http\Requests\UpdateComplaintRequest;
+use App\Http\Resources\ComplaintResource;
+use App\DTOs\ComplaintDTO;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-use Carbon\Carbon;
 
 class ComplaintController extends Controller
 {
-    protected string $table = 'complaints'; 
-    protected array $searchableLike = ['description', 'report_number', 'product_name', 'lot_number', 'defect_location'];
-    protected array $filterableEq  = [
-        'status', 'customer_id', 'created_by', 'product_name'
-    ];
-    protected array $sortable = [
-        'created_at', 'updated_at', 'status', 'report_number', 'defect_quantity'
-    ];
-
-    //========================= CRUD Methods ========================= //
-    public function index(Request $request): JsonResponse
+    // --- 1. INDEX: Lấy danh sách (kèm Join) ---
+    public function index(Request $request)
     {
-        $perPage = max(1, min((int) $request->query('per_page', 15), 100));
+        // Query cơ bản
+        $query = DB::table('complaints')
+            ->leftJoin('customers', 'complaints.customer_id', '=', 'customers.id')
+            ->leftJoin('partners', 'complaints.partner_id', '=', 'partners.id')
+            ->select(
+                'complaints.*', 
+                'customers.name as customer_name', 
+                'partners.name as partner_name'   
+            )
+            ->whereNull('complaints.deleted_at');
 
-        $query = DB::connection('mysql')
-            ->table($this->table . ' as c')
-            ->leftJoin('User as u', 'u.id', '=', 'c.created_by');
-
-        $query->select([
-            'c.*',
-            'u.name as created_by_name',
-            'u.email as created_by_email',
-        ]);
-        // Only show non-deleted records
-        if (Schema::hasColumn($this->table, 'deleted_at')) {
-            $query->whereNull('c.deleted_at');
+        // Filter cơ bản
+        if ($request->has('type')) {
+            $query->where('complaints.type', 'like', '%' . $request->query('type') . '%');
+        }
+        if ($request->has('customer_id')) {
+            $query->where('complaints.customer_id', $request->query('customer_id'));
         }
 
-        // Filter
-        foreach ($this->filterableEq as $col) {
-            if ($request->filled($col)) {
-                $query->where('c.' . $col, $request->input($col));
+        $paginator = $query->orderBy('complaints.created_at', 'desc')->paginate(10);
+
+        // Transform
+        $paginator->getCollection()->transform(function ($row) {
+            return ComplaintDTO::fromDb($row);
+        });
+
+        return ComplaintResource::collection($paginator);
+    }
+
+    // --- 2. SHOW: Xem chi tiết ---
+    public function show(string $id): JsonResponse
+    {
+        $row = $this->findRowWithRelations($id);
+
+        if (!$row) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => new ComplaintResource(ComplaintDTO::fromDb($row)),
+        ]);
+    }
+
+    // --- 3. STORE: Tạo mới ---
+    public function store(StoreComplaintRequest $request): JsonResponse
+    {
+        $data = $request->validated();
+        $uuid = (string) Str::uuid();
+
+        // Map request data sang DB columns
+        $insertData = [
+            'id' => $uuid,
+            'type' => $data['type'],
+            'complaint_no' => $data['complaint_no'] ?? null,
+            'subject' => $data['subject'] ?? null,
+            
+            'customer_id' => $data['customer_id'] ?? null,
+            'partner_id' => $data['partner_id'] ?? null,
+            'five_why_id' => null, // Mặc định null, sẽ cập nhật khi tạo FiveWhy sau
+            
+            'incident_type' => $data['incident_type'] ?? null,
+            'category' => $data['category'] ?? null,
+            'severity_level' => $data['severity_level'] ?? null,
+            'machine' => $data['machine'] ?? null,
+            'report_completed_by' => $data['report_completed_by'] ?? null,
+            
+            'lot_code' => $data['lot_code'] ?? null,
+            'product_code' => $data['product_code'] ?? null,
+            'unit_qty_audited' => $data['unit_qty_audited'] ?? null,
+            'unit_qty_rejected' => $data['unit_qty_rejected'] ?? null,
+            'date_code' => $data['date_code'] ?? null,
+            
+            'date_occurrence' => $data['date_occurrence'] ?? null,
+            'date_detection' => $data['date_detection'] ?? null,
+            'date_report' => $data['date_report'] ?? null,
+            
+            'product_description' => $data['product_description'] ?? null,
+            'detection_point' => $data['detection_point'] ?? null,
+            'photo' => $data['photo'] ?? null,
+            'detection_method' => $data['detection_method'] ?? null,
+            'attachment' => $data['attachment'] ?? null,
+            
+            // Encode JSON
+            'floor_process_visualization' => isset($data['floor_process_visualization']) 
+                ? json_encode($data['floor_process_visualization']) 
+                : null,
+            
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+
+        DB::table('complaints')->insert($insertData);
+
+        // Fetch lại kèm relations
+        $row = $this->findRowWithRelations($uuid);
+
+        return response()->json([
+            'success' => true,
+            'data' => new ComplaintResource(ComplaintDTO::fromDb($row)),
+        ], 201);
+    }
+
+    // --- 4. UPDATE: Cập nhật ---
+    public function update(UpdateComplaintRequest $request, string $id): JsonResponse
+    {
+        $existing = DB::table('complaints')->where('id', $id)->whereNull('deleted_at')->first();
+        if (!$existing) return response()->json(['message' => 'Not found'], 404);
+
+        $data = $request->validated();
+        $updateData = ['updated_at' => now()];
+
+        // List các cột được phép update
+        $fields = [
+            'type', 'complaint_no', 'subject', 'customer_id', 'partner_id',
+            'incident_type', 'category', 'severity_level', 'machine', 'report_completed_by',
+            'lot_code', 'product_code', 'unit_qty_audited', 'unit_qty_rejected', 'date_code',
+            'date_occurrence', 'date_detection', 'date_report',
+            'product_description', 'detection_point', 'photo', 'detection_method', 'attachment'
+        ];
+
+        foreach ($fields as $field) {
+            if (array_key_exists($field, $data)) {
+                $updateData[$field] = $data[$field];
             }
         }
 
-        // Search Keyword
-        if ($request->filled('keyword')) {
-            $keyword = $request->input('keyword');
-            $query->where(function ($q) use ($keyword) {
-                foreach ($this->searchableLike as $col) {
-                    $q->orWhere('c.' . $col, 'LIKE', "%{$keyword}%");
-                }
-            });
+        // Xử lý riêng JSON
+        if (array_key_exists('floor_process_visualization', $data)) {
+            $updateData['floor_process_visualization'] = !empty($data['floor_process_visualization']) 
+                ? json_encode($data['floor_process_visualization']) 
+                : null;
         }
 
-        // Sort
-        $sort = $request->query('sort', '-created_at'); 
-        [$sortCol, $sortDir] = $this->parseSort($sort);
-        
-        if (Schema::hasColumn($this->table, $sortCol)) {
-             $query->orderBy('c.' . $sortCol, $sortDir);
-        } else {
-             $query->orderBy('c.created_at', 'desc');
-        }
+        DB::table('complaints')->where('id', $id)->update($updateData);
 
-        $data = $query->paginate($perPage);
-        return response()->json($data, 200);
-    }
-
-    public function store(Request $request): JsonResponse
-    {
-        if (!$request->isMethod('post')) {
-            return response()->json(['message' => 'Method Not Allowed. Use POST.'], 405);
-        }
-
-        // Validate
-        $request->validate([
-            'product_name'    => ['required', 'string', 'max:255'],
-            'lot_number'      => ['nullable', 'string', 'max:100'],
-            'mfg_date'        => ['nullable', 'date'],
-            'exp_date'        => ['nullable', 'date'],
-            'total_quantity'  => ['nullable', 'numeric'],
-            'defect_quantity' => ['nullable', 'numeric'],
-            'description'     => ['nullable', 'string'],
-            'defect_location' => ['nullable', 'string'],
-            'customer_id'     => ['nullable', 'string', 'max:36'],
-
+        return response()->json([
+            'success' => true,
+            'data' => new ComplaintResource(ComplaintDTO::fromDb($this->findRowWithRelations($id))),
         ]);
-
-        $data = $request->all();
-        $now  = Carbon::now();
-        $data['id'] = (string) Str::uuid();
-
-        DB::connection('mysql')->transaction(function () use (&$data) {
-            $year = Carbon::now()->year;
-            $prefix = "COM-{$year}-";
-
-
-            $maxRef = DB::table($this->table)
-                ->where('report_number', 'LIKE', "{$prefix}%")
-                ->lockForUpdate() 
-                ->selectRaw("MAX(CAST(SUBSTRING_INDEX(report_number, '-', -1) AS UNSIGNED)) as max_num")
-                ->value('max_num');
-
-            $nextNum = ($maxRef ?? 0) + 1;
-            $data['report_number'] = $prefix . str_pad($nextNum, 4, '0', STR_PAD_LEFT);
-        });
-
-        $data['created_at'] = $now;
-        $data['updated_at'] = $now;
-        $data['status'] = 'PLAN';
-        $data['created_by'] = $data['created_by'] ?? $request->user()?->id; 
-
-        $insert = collect($data)->filter(function ($value, $key) {
-            return Schema::connection('mysql')->hasColumn($this->table, $key);
-        })->all();
-
-        DB::table($this->table)->insert($insert);
-
-        return $this->showWithJoin($data['id']);
     }
 
-    public function show(Request $request): JsonResponse
+    // --- 5. DESTROY: Xóa mềm ---
+    public function destroy(string $id): JsonResponse
     {
-        $id = $request->query('id'); 
-        if (!$id) {
-            return response()->json(['message' => 'id is required'], 422);
-        }
-        return $this->showWithJoin($id);
+        $exists = DB::table('complaints')->where('id', $id)->whereNull('deleted_at')->exists();
+        if (!$exists) return response()->json(['message' => 'Not found'], 404);
+
+        DB::table('complaints')->where('id', $id)->update(['deleted_at' => now()]);
+
+        return response()->json(['success' => true, 'message' => 'Deleted successfully']);
     }
 
-    public function update(Request $request): JsonResponse
+    // --- Helper: Find Row with Joins ---
+    private function findRowWithRelations(string $id)
     {
-        if (!$request->isMethod('put') && !$request->isMethod('patch')) {
-            return response()->json(['message' => 'Method Not Allowed. Use PUT/PATCH.'], 405);
-        }
-
-        $id = $request->query('id');
-        if (!$id) return response()->json(['message' => 'id is required'], 422);
-
-        $exists = DB::table($this->table)->where('id', $id)->whereNull('deleted_at')->exists();
-        if (!$exists) return response()->json(['message' => 'Complaint not found'], 404);
-
-        $data = $request->all();
-        $data['updated_at'] = Carbon::now();
-
-        $allowedColumns = Schema::getColumnListing($this->table);
-        $update = collect($data)
-            ->only($allowedColumns)
-            ->except(['id', 'report_number', 'created_at', 'created_by', 'deleted_at']) 
-            ->all();
-
-        if (!empty($update)) {
-            DB::table($this->table)->where('id', $id)->update($update);
-        }
-
-        return $this->showWithJoin($id);
-    }
-
-    
-    public function destroy(Request $request): JsonResponse
-    {
-        if (!$request->isMethod('delete')) {
-            return response()->json(['message' => 'Method Not Allowed. Use DELETE.'], 405);
-        }
-
-        $id = $request->query('id');
-        if (!$id) return response()->json(['message' => 'id is required'], 422);
-
-        $record = DB::table($this->table)->where('id', $id)->whereNull('deleted_at')->first();
-        if (!$record) return response()->json(['message' => 'Complaint not found'], 404);
-        
-        DB::table($this->table)->where('id', $id)->update(['deleted_at' => Carbon::now()]);
-
-        return response()->json(['message' => 'Deleted successfully'], 200);
-    }
-
-    /* ========================= Helpers ========================= */
-
-    protected function showWithJoin(string $id): JsonResponse
-    {
-        // Main Complaint with Created By info
-        $complaint = DB::connection('mysql')
-            ->table($this->table . ' as c')
-            ->leftJoin('User as u', 'u.id', '=', 'c.created_by')
-            ->where('c.id', $id)
-            ->select([
-                'c.*',
-                'u.name as created_by_name',
-                'u.avatar_url as created_by_avatar'
-            ])
+        return DB::table('complaints')
+            ->leftJoin('customers', 'complaints.customer_id', '=', 'customers.id')
+            ->leftJoin('partners', 'complaints.partner_id', '=', 'partners.id')
+            ->select(
+                'complaints.*', 
+                'customers.name as customer_name', 
+                'partners.name as partner_name'
+            )
+            ->where('complaints.id', $id)
+            ->whereNull('complaints.deleted_at')
             ->first();
-
-        if (!$complaint) {
-            return response()->json(['message' => 'Complaint not found'], 404);
-        }
-
-        // Containment Actions (Plan)
-        $complaint->containment_actions = DB::table('containment_actions')
-            ->where('complaint_id', $id)
-            ->whereNull('deleted_at')
-            ->get();
-
-        // Investigation Checks (Plan - Grouped by Category)
-        $checks = DB::table('investigation_checks')
-            ->where('complaint_id', $id)
-             ->whereNull('deleted_at') 
-            ->orderBy('display_order')
-            ->get();
-        $complaint->investigation_checks = $checks->groupBy('category');
-
-        //  RCA 5 Whys (Plan)
-        $complaint->rca_5_whys = DB::table('rca_five_whys')
-            ->where('complaint_id', $id)
-            ->whereNull('deleted_at')
-            ->orderBy('iteration')
-            ->get();
-
-        // 5. RCA Fishbones (Plan - Grouped by Category)
-        $fishbones = DB::table('rca_fishbones')
-            ->where('complaint_id', $id)
-            ->whereNull('deleted_at')
-            ->get();
-
-        $complaint->rca_fishbones = $fishbones->groupBy('category');
-
-        // 6. Corrective Actions (Plan & Do)
-        $complaint->corrective_actions = DB::table('corrective_actions')
-            ->where('complaint_id', $id)
-            ->whereNull('deleted_at')
-            ->get();
-
-        // 7. Verifications (Check)
-        $complaint->verifications = DB::table('verifications')
-            ->where('complaint_id', $id)
-            ->whereNull('deleted_at')
-            ->get();
-
-        // 8. Standardizations (Act)
-        $complaint->standardizations = DB::table('standardizations')
-            ->where('complaint_id', $id)
-            ->whereNull('deleted_at')
-            ->first(); // Quan hệ 1-1
-
-        // 9. Attachments
-        $complaint->attachments = DB::table('attachments')
-            ->where('record_id', $id)
-            ->whereNull('deleted_at')
-            ->get();
-
-        return response()->json((array) $complaint);
-    }
-
-    protected function parseSort(string $input): array
-    {
-        $input = trim($input);
-        $dir = 'asc';
-        if (str_starts_with($input, '-')) {
-            $dir = 'desc';
-            $input = substr($input, 1);
-        }
-        return [$input, $dir];
     }
 }

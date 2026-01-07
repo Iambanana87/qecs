@@ -11,44 +11,36 @@ return new class extends Migration
         Schema::create('complaints', function (Blueprint $table) {
 
             $table->uuid('id')->primary();
-            $table->uuid('created_by')->nullable(); 
+            $table->string('type')->unique();
+            $table->string('complaint_no')->nullable(); 
+            $table->text('subject')->nullable();
 
-            $table->string('subject')->nullable();
-            
-            $table->enum('status', [
-                'Draft', 
-                'Submitted', 
-                'PLAN', 'DO', 'CHECK', 'ACT',
-                'Closed', 
-                'CANCELLED'
-            ])->default('Draft');
-
-            $table->string('department')->nullable();
-            $table->string('manager')->nullable();
-            $table->string('line_area')->nullable();     
+            $table->uuid('customer_id')->nullable();    
             $table->string('incident_type')->nullable(); 
-            $table->text('product_description')->nullable();
-            
-            $table->string('lot_code', 100)->nullable(); 
-            $table->string('product_code')->nullable();
-            $table->string('machine')->nullable();       
+            $table->text('category')->nullable();
+            $table->string('severity_level')->nullable();
+            $table->string('machine')->nullable();
+            $table->string('report_completed_by')->nullable();
+            $table->string('lot_code')->nullable(); 
+            $table->string('product_code')->nullable();   
+            $table->string('unit_qty_audited')->nullable(); 
+            $table->string('unit_qty_rejected')->nullable();
             $table->string('date_code')->nullable();     
 
             $table->dateTime('date_occurrence')->nullable();
             $table->dateTime('date_detection')->nullable();
             $table->dateTime('date_report')->nullable();
+            $table->text('product_description')->nullable();
+            $table->text('detection_point')->nullable();
+            $table->text('photo')->nullable();
+            $table->text('detection_method')->nullable();
+            
+            $table->uuid('partner_id')->nullable()->index();  
+            $table->text('attachment')->nullable();
+            $table->json('floor_process_visualization')->nullable();
 
-            $table->decimal('unit_qty_audited', 15, 2)->nullable();
-            $table->decimal('unit_qty_rejected', 15, 2)->nullable();
+            $table->uuid('five_why_id')->nullable();
 
-            $table->enum('severity_level', ['Low', 'Medium', 'High', 'Critical'])->nullable();
-            $table->string('category')->nullable();
-            
-            $table->string('report_completed_by')->nullable(); 
-            $table->string('detection_point')->nullable();    
-            
-            $table->uuid('partner_id')->nullable()->index();   
-            
             $table->timestamps();
             $table->softDeletes();
         });

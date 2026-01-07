@@ -9,31 +9,44 @@ use Faker\Factory as Faker;
 
 class DatabaseSeeder extends Seeder
 {
-    public function run(): void
+    public function run()
     {
         $faker = Faker::create();
+        $limit = 50; // Số lượng record tối thiểu
 
-        // 1. Tạo Users (10 người)
-        // Lưu ý: Migration bạn khai báo là 'User' (viết hoa), nên ở đây dùng bảng 'User'
+        $this->command->info('1. Seeding Independent Tables (Parents)...');
+
+        // 1. Seed Users
         $userIds = [];
-        for ($i = 0; $i < 10; $i++) {
+        for ($i = 0; $i < $limit; $i++) {
             $id = Str::uuid()->toString();
             $userIds[] = $id;
             DB::table('User')->insert([
                 'id' => $id,
                 'name' => $faker->name,
                 'email' => $faker->unique()->safeEmail,
-                'role' => $faker->randomElement(['Admin', 'Manager', 'Staff', 'Operator']),
-                'avatar_url' => $faker->imageUrl(100, 100, 'people'),
+                'role' => $faker->jobTitle,
+                'avatar_url' => $faker->imageUrl(),
                 'status' => $faker->randomElement(['online', 'idle', 'offline', 'busy']),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
         }
 
-        // 2. Tạo Partners (10 đối tác)
+        // 2. Seed Countries
+        $countryIds = [];
+        for ($i = 0; $i < $limit; $i++) {
+            $id = Str::uuid()->toString();
+            $countryIds[] = $id;
+            DB::table('Country')->insert([
+                'id' => $id,
+                'name' => $faker->country,
+            ]);
+        }
+
+        // 3. Seed Partners
         $partnerIds = [];
-        for ($i = 0; $i < 10; $i++) {
+        for ($i = 0; $i < $limit; $i++) {
             $id = Str::uuid()->toString();
             $partnerIds[] = $id;
             DB::table('partners')->insert([
@@ -41,259 +54,305 @@ class DatabaseSeeder extends Seeder
                 'name' => $faker->company,
                 'code' => strtoupper($faker->bothify('PART-####')),
                 'country' => $faker->country,
-                'contact' => $faker->name . ' (' . $faker->phoneNumber . ')',
+                'contact' => $faker->phoneNumber,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
         }
 
-        // 3. TẠO 50 COMPLAINTS VÀ DỮ LIỆU LIÊN QUAN (CORE LOGIC)
-        for ($i = 0; $i < 50; $i++) {
-            $complaintId = Str::uuid()->toString();
-            $creatorId = $faker->randomElement($userIds);
-            $partnerId = $faker->randomElement($partnerIds);
-            
-            // Random thời gian để tạo tính chân thực
-            $createdAt = $faker->dateTimeBetween('-1 year', 'now');
-            $dateOccurrence = $faker->dateTimeBetween('-2 years', $createdAt);
-            
-            // Status flow
-            $status = $faker->randomElement(['Draft', 'Submitted', 'PLAN', 'DO', 'CHECK', 'ACT', 'Closed', 'CANCELLED']);
-            
-            // 3.1 Insert Complaint (Header)
-            DB::table('complaints')->insert([
-                'id' => $complaintId,
-                'report_number' => 'RPT-' . $createdAt->format('Y') . '-' . str_pad($i + 1, 4, '0', STR_PAD_LEFT),
-                'created_by' => $creatorId,
-                'subject' => $faker->sentence(6),
-                'status' => $status,
-                
-                // General Info
+        // 4. Seed Customers
+        $customerIds = [];
+        for ($i = 0; $i < $limit; $i++) {
+            $id = Str::uuid()->toString();
+            $customerIds[] = $id;
+            DB::table('customers')->insert([
+                'id' => $id,
+                'name' => $faker->company,
+                'description' => $faker->catchPhrase,
                 'department' => $faker->jobTitle,
-                'manager' => $faker->name,
-                'line_area' => 'Line ' . $faker->randomDigitNotNull,
-                'incident_type' => $faker->randomElement(['Quality', 'Safety', 'Process']),
-                'product_description' => $faker->text(100),
-                
-                'lot_code' => strtoupper($faker->bothify('LOT-??##')), // Updated column name
-                'product_code' => strtoupper($faker->bothify('PRD-####')),
-                'machine' => 'MC-' . $faker->randomDigitNotNull,
-                'date_code' => $createdAt->format('dmY'),
-                
-                'date_occurrence' => $dateOccurrence,
-                'date_detection' => $faker->dateTimeBetween($dateOccurrence, $createdAt),
-                'date_report' => $createdAt,
-                
-                'unit_qty_audited' => $faker->randomFloat(2, 100, 1000), // Decimal
-                'unit_qty_rejected' => $faker->randomFloat(2, 1, 50),   // Decimal
-                
-                'severity_level' => $faker->randomElement(['Low', 'Medium', 'High', 'Critical']),
-                'category' => $faker->word,
-                
-                'report_completed_by' => $faker->name,
-                'detection_point' => $faker->randomElement(['Incoming', 'In-Process', 'Outgoing', 'Customer']),
-                'partner_id' => $partnerId,
-                
-                'created_at' => $createdAt,
-                'updated_at' => $createdAt,
+                'department_manager' => $faker->name,
+                'line_area' => 'Line ' . $faker->randomDigit,
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
+        }
 
-            // 3.2 Insert Problem Description (1-1) - 5W1H
+        $this->command->info('2. Seeding Main Transaction Tables...');
+
+        // 5. Seed Complaints (Hub Table)
+        $complaintIds = [];
+        for ($i = 0; $i < $limit; $i++) {
+            $id = Str::uuid()->toString();
+            $complaintIds[] = $id;
+            DB::table('complaints')->insert([
+                'id' => $id,
+                'type' => $faker->unique()->bothify('CPL-#####'), // Unique constraint
+                'complaint_no' => $faker->bothify('NO-####'),
+                'subject' => $faker->sentence,
+                'customer_id' => $faker->randomElement($customerIds),
+                'incident_type' => $faker->randomElement(['Safety', 'Quality', 'Environment']),
+                'category' => $faker->word,
+                'severity_level' => $faker->randomElement(['Low', 'Medium', 'High', 'Critical']),
+                'machine' => 'Machine-' . $faker->randomDigit,
+                'report_completed_by' => $faker->name,
+                'lot_code' => $faker->bothify('LOT-###'),
+                'product_code' => $faker->bothify('PROD-###'),
+                'unit_qty_audited' => $faker->numberBetween(100, 1000),
+                'unit_qty_rejected' => $faker->numberBetween(1, 50),
+                'date_code' => now()->format('Ymd'),
+                'date_occurrence' => $faker->dateTimeThisYear(),
+                'date_detection' => $faker->dateTimeThisYear(),
+                'date_report' => now(),
+                'product_description' => $faker->text(50),
+                'detection_point' => 'QA Gate',
+                'photo' => $faker->imageUrl(),
+                'detection_method' => 'Visual Inspection',
+                'partner_id' => $faker->randomElement($partnerIds),
+                'attachment' => null,
+                'floor_process_visualization' => json_encode(['step1' => 'ok']),
+                'five_why_id' => null, // Will update later if needed or rely on reverse relation
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        // 6. Seed Audits
+        $auditIds = [];
+        for ($i = 0; $i < $limit; $i++) {
+            $id = Str::uuid()->toString();
+            $auditIds[] = $id;
+            DB::table('Audit')->insert([
+                'id' => $id,
+                'reference' => $faker->bothify('AUD-####'),
+                'subject' => $faker->sentence,
+                'type' => $faker->randomElement(['Internal_Audit', 'External_Audit']),
+                'standard_id' => Str::uuid()->toString(), // Fake standard ID
+                'company' => $faker->company,
+                'stage' => $faker->randomElement(['Planned', 'In_Progress', 'Reporting', 'Closed']),
+                'external_ref_no' => $faker->bothify('EXT-####'),
+                'start_date' => $faker->dateTimeThisMonth(),
+                'end_date' => $faker->dateTimeThisMonth(),
+            ]);
+        }
+
+        // 7. Seed Quality Alerts
+        $alertIds = [];
+        for ($i = 0; $i < $limit; $i++) {
+            $id = Str::uuid()->toString();
+            $alertIds[] = $id;
+            DB::table('QualityAlert')->insert([
+                'id' => $id,
+                'reference' => $faker->bothify('ALERT-####'),
+                'title' => $faker->sentence,
+                'type' => $faker->randomElement(['Quality', 'Safety', 'Labeling']),
+                'severity' => $faker->randomElement(['Low', 'Medium', 'High']),
+                'status' => $faker->randomElement(['Draft', 'Active', 'Closed']),
+                'description' => $faker->paragraph,
+                'immediate_instruction' => $faker->sentence,
+                'issued_by' => $faker->randomElement($userIds),
+                'acknowledgement_required' => $faker->boolean,
+                'created_date' => now(),
+                'effective_date' => now(),
+                'expiration_date' => $faker->dateTimeBetween('now', '+1 year'),
+                'related_complaint_id' => $faker->randomElement($complaintIds),
+                'related_action_id' => Str::uuid()->toString(),
+            ]);
+        }
+
+        $this->command->info('3. Seeding Dependent Tables (Relations)...');
+
+        // 8. Seed Five Whys (1-to-1 with Complaints)
+        // Only seed for existing complaints
+        foreach ($complaintIds as $complaintId) {
+            $fiveWhyId = Str::uuid()->toString();
             DB::table('five_whys')->insert([
-                'id' => Str::uuid()->toString(),
-                'complaint_id' => $complaintId,
+                'id' => $fiveWhyId,
+                'complaint_id' => $complaintId, // Unique constraint
                 'what' => $faker->sentence,
                 'where' => $faker->city,
-                'when' => $dateOccurrence->format('Y-m-d H:i:s'),
+                'when' => $faker->date,
                 'who' => $faker->name,
-                'which' => 'Lot ' . $faker->bothify('##??'),
+                'which' => $faker->word,
                 'how' => $faker->sentence,
                 'phenomenon_description' => $faker->paragraph,
-                'photos' => $faker->imageUrl(), // Lưu URL giả
-                'created_at' => $createdAt,
-                'updated_at' => $createdAt,
+                'photos' => $faker->imageUrl(),
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
+            
+            // Update complaint with this ID
+            DB::table('complaints')->where('id', $complaintId)->update(['five_why_id' => $fiveWhyId]);
+        }
 
-            // 3.3 Insert 5M Analysis (Type-based rows)
-            // Vì cấu trúc mới là dạng dọc (type column), ta loop qua 5 loại
-            $fiveMTypes = ['Man', 'Machine', 'Method', 'Material', 'Environment'];
-            foreach ($fiveMTypes as $type) {
-                DB::table('five_m_analyses')->insert([
-                    'id' => Str::uuid()->toString(),
+        // 9. Seed Attachments (Polymorphic)
+        for ($i = 0; $i < $limit; $i++) {
+            DB::table('attachments')->insert([
+                'id' => Str::uuid()->toString(),
+                'record_id' => $faker->randomElement($complaintIds), // Linking to complaints
+                'record_type' => 'App\Models\Complaint',
+                'context' => 'evidence',
+                'file_name' => $faker->word . '.pdf',
+                'file_url' => $faker->url,
+                'file_type' => 'application/pdf',
+                'file_size' => $faker->numberBetween(1000, 50000),
+                'uploaded_at' => now(),
+            ]);
+        }
+
+        // 10. Seed Corrective Actions & Postpone Records
+        $actionIds = [];
+        foreach ($complaintIds as $complaintId) {
+             // Create 1-2 actions per complaint
+             for($k=0; $k < rand(1,2); $k++) {
+                $actId = Str::uuid()->toString();
+                $actionIds[] = $actId;
+                DB::table('corrective_actions')->insert([
+                    'id' => $actId,
                     'complaint_id' => $complaintId,
-                    'type' => $type,
-                    'code' => strtoupper(substr($type, 0, 3)) . '-' . $faker->randomDigit,
-                    'cause' => $faker->sentence,
-                    'confirmed' => $faker->boolean,
-                    'description' => $faker->text(50),
-                    'created_at' => $createdAt,
-                    'updated_at' => $createdAt,
+                    'no' => $k + 1,
+                    'action' => $faker->sentence,
+                    'responsible' => $faker->name,
+                    'end_date' => $faker->dateTimeBetween('now', '+1 month'),
+                    'verification' => $faker->boolean,
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
-            }
+             }
+        }
 
-            // 3.4 Insert Why Why Analysis
-            // Tạo 1 bản ghi cho HAPPEN và 1 bản ghi cho DETECTION
-            foreach (['HAPPEN', 'DETECTION'] as $type) {
-                DB::table('why_why_analyses')->insert([
-                    'id' => Str::uuid()->toString(),
-                    'complaint_id' => $complaintId,
-                    'analysis_type' => $type,
-                    'why1' => $faker->sentence,
-                    'why2' => $faker->sentence,
-                    'why3' => $faker->sentence,
-                    'why4' => $faker->sentence,
-                    'why5' => $faker->sentence,
-                    'root_cause' => $faker->sentence,
-                    'capa_ref' => 'CAPA-' . $faker->randomDigit,
-                    'status' => 'Done',
-                    'created_at' => $createdAt,
-                    'updated_at' => $createdAt,
-                ]);
-            }
+        // 11. Seed Postpone Records (Linked to Actions)
+        // Only create for some actions
+        foreach(array_slice($actionIds, 0, 20) as $actId) {
+            DB::table('PostponeRecord')->insert([
+                'id' => Str::uuid()->toString(),
+                'action_id' => $actId,
+                'requested_by' => $faker->randomElement($userIds),
+                'requested_date' => now(),
+                'old_due_date' => now(),
+                'new_due_date' => $faker->dateTimeBetween('+1 week', '+1 month'),
+                'reason' => $faker->sentence,
+                'status' => $faker->randomElement(['Waiting_for_Approval', 'Approved']),
+            ]);
+        }
 
-            // 3.5 Insert Check Material Machines
+        // 12. Seed Other Analysis Tables (Linked to Complaint)
+        foreach ($complaintIds as $complaintId) {
+            // Check Material Machines
             DB::table('check_material_machines')->insert([
                 'id' => Str::uuid()->toString(),
                 'complaint_id' => $complaintId,
                 'no' => 1,
-                'machine' => 'Machine-' . $faker->randomDigit,
-                'sub_assembly' => 'Gearbox',
-                'component' => 'Bearing',
-                'description' => 'Noise issue',
-                'current_condition' => 'Worn out',
-                'before_photo' => $faker->imageUrl(),
-                'after_photo' => $faker->imageUrl(),
-                'respons' => $faker->name,
-                'control_frequency' => 'Daily',
-                'status' => 'NG',
-                'close_date' => $faker->date(),
-                'created_at' => $createdAt,
-                'updated_at' => $createdAt,
+                'machine' => 'Machine A',
+                'description' => $faker->sentence,
+                'current_condition' => 'Bad',
+                'status' => 'Pending',
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
-
-            // 3.6 Insert Check Parameters Operations
             DB::table('check_parameters_operations')->insert([
                 'id' => Str::uuid()->toString(),
                 'complaint_id' => $complaintId,
                 'no' => 1,
-                'machine' => 'CNC-01',
-                'sub_assembly' => 'Spindle',
-                'component' => 'Speed',
-                'description' => 'Speed fluctuation',
-                'current_condition' => 'Unstable',
-                'respons' => $faker->name,
-                'status' => 'NG',
-                'created_at' => $createdAt,
-                'updated_at' => $createdAt,
+                'machine' => 'Machine A',
+                'description' => $faker->sentence,
+                'current_condition' => 'Bad',
+                'status' => 'Pending',
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
 
-            // 3.7 Insert Immediate Actions
-            DB::table('immediate_actions')->insert([
+             // Immediate Actions
+             DB::table('immediate_actions')->insert([
                 'id' => Str::uuid()->toString(),
                 'complaint_id' => $complaintId,
                 'no' => 1,
-                'action' => 'Stop production line',
+                'action' => 'Stop Line',
                 'status' => 'Done',
                 'responsible' => $faker->name,
-                'created_at' => $createdAt,
-                'updated_at' => $createdAt,
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
 
-            // 3.8 Insert Corrective Actions
-            DB::table('corrective_actions')->insert([
+            // Five M Analysis
+            foreach(['MAN', 'MACHINE', 'METHOD', 'MATERIAL', 'ENVIRONMENT'] as $type) {
+                DB::table('five_m_analyses')->insert([
+                    'id' => Str::uuid()->toString(),
+                    'complaint_id' => $complaintId,
+                    'type' => $type,
+                    'code' => $faker->word,
+                    'cause' => $faker->sentence,
+                    'confirmed' => $faker->boolean,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            // Why Why Analysis
+            DB::table('why_why_analyses')->insert([
                 'id' => Str::uuid()->toString(),
                 'complaint_id' => $complaintId,
-                'no' => 1,
-                'action' => 'Replace sensor',
-                'responsible' => $faker->name,
-                'end_date' => $faker->date(),
-                'verification' => $faker->boolean,
-                'created_at' => $createdAt,
-                'updated_at' => $createdAt,
+                'analysis_type' => 'HAPPEN',
+                'why1' => $faker->sentence,
+                'why2' => $faker->sentence,
+                'why3' => $faker->sentence,
+                'root_cause' => $faker->sentence,
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
 
-            // 3.9 Insert Effectiveness Checks
-            DB::table('effectiveness_checks')->insert([
-                'id' => Str::uuid()->toString(),
-                'complaint_id' => $complaintId,
-                'produce_cause' => $faker->boolean,
-                'no' => 1,
-                'action' => 'Monitor for 24 hours',
-                'responsible' => $faker->name,
-                'end_date' => $faker->date(),
-                'verification' => true,
-                'created_at' => $createdAt,
-                'updated_at' => $createdAt,
-            ]);
-
-            // 3.10 Insert Preventive Actions
+            // Preventive Actions
             DB::table('preventive_actions')->insert([
                 'id' => Str::uuid()->toString(),
                 'complaint_id' => $complaintId,
                 'no' => 1,
-                'action' => 'Update SOP version 2.0',
+                'action' => $faker->sentence,
                 'responsible' => $faker->name,
-                'end_date' => $faker->date(),
-                'verification' => false,
-                // Các trường đại diện
-                'complaint_responsible' => $faker->name,
-                'production_representative' => $faker->name,
-                'quality_representative' => $faker->name,
-                'engineering_representative' => $faker->name,
-                'quality_manager' => $faker->name,
-                'created_at' => $createdAt,
-                'updated_at' => $createdAt,
+                'end_date' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
-
-            // 3.11 Attachments
-            if ($faker->boolean(70)) { 
-                DB::table('attachments')->insert([
-                    'id' => Str::uuid()->toString(),
-                    'record_id' => $complaintId,
-                    'record_type' => 'App\Models\Complaint', // Hoặc 'complaints' tùy convention
-                    'context' => 'EVIDENCE',
-                    'file_name' => 'evidence_' . $i . '.jpg',
-                    'file_url' => $faker->imageUrl(),
-                    'file_type' => 'image/jpeg',
-                    'file_size' => $faker->numberBetween(1000, 50000),
-                    'uploaded_at' => $createdAt,
-                ]);
-            }
+            
+            // Effectiveness Checks
+            DB::table('effectiveness_checks')->insert([
+                'id' => Str::uuid()->toString(),
+                'complaint_id' => $complaintId,
+                'produce_cause' => true,
+                'no' => 1,
+                'action' => 'Check again',
+                'responsible' => $faker->name,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
         }
-
-        // 4. Các bảng phụ (Giữ nguyên hoặc cập nhật nếu cần)
         
-        // Country
-        $countries = ['Vietnam', 'USA', 'Japan', 'Korea', 'Germany'];
-        foreach ($countries as $c) {
-            DB::table('Country')->insert(['id' => Str::uuid()->toString(), 'name' => $c]);
-        }
-
-        // Quality Alert
-        for ($i = 0; $i < 5; $i++) {
-            DB::table('QualityAlert')->insert([
+        // 13. Audit Trail (Logs)
+        for ($i = 0; $i < $limit; $i++) {
+            DB::table('AuditTrail')->insert([
                 'id' => Str::uuid()->toString(),
-                'reference' => 'QA-' . $faker->year . '-' . $i,
-                'title' => $faker->sentence,
-                'type' => 'Quality',
-                'severity' => 'High',
-                'status' => 'Active',
-                'description' => $faker->paragraph,
-                'issued_by' => $faker->randomElement($userIds),
-                'created_date' => now(),
-            ]);
-        }
-
-        // Notification
-        for ($i = 0; $i < 20; $i++) {
-            DB::table('Notification')->insert([
-                'id' => Str::uuid()->toString(),
-                'type' => 'System',
-                'title' => 'New Complaint Created',
-                'description' => 'Complaint needs review.',
+                'table_name' => 'complaints',
+                'record_id' => $faker->randomElement($complaintIds),
+                'user_id' => $faker->randomElement($userIds),
+                'action' => 'UPDATE',
+                'field_name' => 'status',
+                'old_value' => 'Open',
+                'new_value' => 'Closed',
                 'timestamp' => now(),
-                'isUnread' => $faker->boolean,
             ]);
         }
+        
+        // 14. Notifications
+        for ($i = 0; $i < $limit; $i++) {
+             DB::table('Notification')->insert([
+                'id' => Str::uuid()->toString(),
+                'type' => 'Alert',
+                'title' => 'New Complaint Assigned',
+                'description' => $faker->sentence,
+                'timestamp' => now(),
+                'isUnread' => true,
+                'link' => '/complaints/' . $faker->randomElement($complaintIds),
+            ]);
+        }
+
+        $this->command->info('Seeding completed successfully!');
     }
 }
