@@ -86,8 +86,9 @@ class DatabaseSeeder extends Seeder
             $complaintIds[] = $id;
             DB::table('complaints')->insert([
                 'id' => $id,
-                'type' => $faker->unique()->bothify('CPL-#####'), // Unique constraint
-                'complaint_no' => $faker->bothify('NO-####'),
+                // CHANGE: Type is now strictly 'client' or 'supplier'
+                'type' => $faker->randomElement(['client', 'supplier']), 
+                'complaint_no' => $faker->unique()->bothify('NO-####'), // Moved unique constraint here if needed
                 'subject' => $faker->sentence,
                 'customer_id' => $faker->randomElement($customerIds),
                 'incident_type' => $faker->randomElement(['Safety', 'Quality', 'Environment']),
@@ -110,7 +111,7 @@ class DatabaseSeeder extends Seeder
                 'partner_id' => $faker->randomElement($partnerIds),
                 'attachment' => null,
                 'floor_process_visualization' => json_encode(['step1' => 'ok']),
-                'five_why_id' => null, // Will update later if needed or rely on reverse relation
+                'five_why_id' => null, 
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -126,7 +127,7 @@ class DatabaseSeeder extends Seeder
                 'reference' => $faker->bothify('AUD-####'),
                 'subject' => $faker->sentence,
                 'type' => $faker->randomElement(['Internal_Audit', 'External_Audit']),
-                'standard_id' => Str::uuid()->toString(), // Fake standard ID
+                'standard_id' => Str::uuid()->toString(), 
                 'company' => $faker->company,
                 'stage' => $faker->randomElement(['Planned', 'In_Progress', 'Reporting', 'Closed']),
                 'external_ref_no' => $faker->bothify('EXT-####'),
@@ -162,12 +163,11 @@ class DatabaseSeeder extends Seeder
         $this->command->info('3. Seeding Dependent Tables (Relations)...');
 
         // 8. Seed Five Whys (1-to-1 with Complaints)
-        // Only seed for existing complaints
         foreach ($complaintIds as $complaintId) {
             $fiveWhyId = Str::uuid()->toString();
             DB::table('five_whys')->insert([
                 'id' => $fiveWhyId,
-                'complaint_id' => $complaintId, // Unique constraint
+                'complaint_id' => $complaintId,
                 'what' => $faker->sentence,
                 'where' => $faker->city,
                 'when' => $faker->date,
@@ -180,15 +180,14 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ]);
             
-            // Update complaint with this ID
             DB::table('complaints')->where('id', $complaintId)->update(['five_why_id' => $fiveWhyId]);
         }
 
-        // 9. Seed Attachments (Polymorphic)
+        // 9. Seed Attachments
         for ($i = 0; $i < $limit; $i++) {
             DB::table('attachments')->insert([
                 'id' => Str::uuid()->toString(),
-                'record_id' => $faker->randomElement($complaintIds), // Linking to complaints
+                'record_id' => $faker->randomElement($complaintIds),
                 'record_type' => 'App\Models\Complaint',
                 'context' => 'evidence',
                 'file_name' => $faker->word . '.pdf',
@@ -199,10 +198,9 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
-        // 10. Seed Corrective Actions & Postpone Records
+        // 10. Seed Corrective Actions
         $actionIds = [];
         foreach ($complaintIds as $complaintId) {
-             // Create 1-2 actions per complaint
              for($k=0; $k < rand(1,2); $k++) {
                 $actId = Str::uuid()->toString();
                 $actionIds[] = $actId;
@@ -220,8 +218,7 @@ class DatabaseSeeder extends Seeder
              }
         }
 
-        // 11. Seed Postpone Records (Linked to Actions)
-        // Only create for some actions
+        // 11. Seed Postpone Records
         foreach(array_slice($actionIds, 0, 20) as $actId) {
             DB::table('PostponeRecord')->insert([
                 'id' => Str::uuid()->toString(),
@@ -235,7 +232,7 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
-        // 12. Seed Other Analysis Tables (Linked to Complaint)
+        // 12. Seed Other Analysis Tables
         foreach ($complaintIds as $complaintId) {
             // Check Material Machines
             DB::table('check_material_machines')->insert([
@@ -249,6 +246,8 @@ class DatabaseSeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+            
+            // Check Parameters Operations
             DB::table('check_parameters_operations')->insert([
                 'id' => Str::uuid()->toString(),
                 'complaint_id' => $complaintId,
@@ -325,7 +324,7 @@ class DatabaseSeeder extends Seeder
             ]);
         }
         
-        // 13. Audit Trail (Logs)
+        // 13. Audit Trail
         for ($i = 0; $i < $limit; $i++) {
             DB::table('AuditTrail')->insert([
                 'id' => Str::uuid()->toString(),

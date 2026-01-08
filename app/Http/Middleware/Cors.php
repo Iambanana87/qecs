@@ -14,6 +14,13 @@ class Cors
     public function handle(Request $request, Closure $next)
     {
         $allowedOrigin = 'http://localhost:5173'; // thay nếu FE chạy ở port khác
+        $origin = $request->header('Origin');
+
+        // Danh sách các domain/IP được phép (cho vào mảng để dễ quản lý)
+        // Trong môi trường dev nội bộ, bạn có thể cho phép tất cả bằng cách kiểm tra nếu $origin tồn tại
+        // LƯU Ý: Khi deploy thật thì nên giới hạn cụ thể.
+        $allowedOrigin = $origin ?: '*';
+        
 
         // Nếu là preflight request (OPTIONS) trả luôn
         if ($request->getMethod() === 'OPTIONS') {

@@ -3,7 +3,6 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class StoreComplaintRequest extends FormRequest
 {
@@ -15,36 +14,41 @@ class StoreComplaintRequest extends FormRequest
     public function rules(): array
     {
         return [
+            // General
             'type' => ['required', 'string', 'unique:complaints,type'],
-            'complaint_no' => ['nullable', 'string', 'max:50'],
+            'complaint_no' => ['nullable', 'string'],
             'subject' => ['nullable', 'string'],
-            
             'customer_id' => ['nullable', 'uuid', 'exists:customers,id'],
             'partner_id' => ['nullable', 'uuid', 'exists:partners,id'],
             
+            // Quantities (snake_case)
+            'unit_qty_audited' => ['nullable', 'numeric'],
+            'unit_qty_rejected' => ['nullable', 'numeric'],
+            
+            // Dates (snake_case)
+            'problem_occurrence' => ['nullable', 'date'],
+            'problem_detection' => ['nullable', 'date'],
+            'report_time' => ['nullable', 'date'],
+
+            // Photos (snake_case)
+            'photos' => ['nullable', 'array'],
+            'photos.*' => ['string', 'url'],
+
+            // Partner Photos (snake_case)
+            'partner_photos' => ['nullable', 'array'],
+            'partner_photos.*' => ['string', 'url'],
+
+            // Details (snake_case matching DB columns mostly)
             'incident_type' => ['nullable', 'string'],
             'category' => ['nullable', 'string'],
             'severity_level' => ['nullable', 'string'],
-            'machine' => ['nullable', 'string'],
-            'report_completed_by' => ['nullable', 'string'],
-            
+            'product_description' => ['nullable', 'string'],
             'lot_code' => ['nullable', 'string'],
             'product_code' => ['nullable', 'string'],
-            'unit_qty_audited' => ['nullable', 'string'], 
-            'unit_qty_rejected' => ['nullable', 'string'],
-            'date_code' => ['nullable', 'string'],
-
-            'date_occurrence' => ['nullable', 'date'],
-            'date_detection' => ['nullable', 'date'],
-            'date_report' => ['nullable', 'date'],
-            
-            'product_description' => ['nullable', 'string'],
+            'machine' => ['nullable', 'string'],
+            'report_completed_by' => ['nullable', 'string'],
             'detection_point' => ['nullable', 'string'],
-            'photo' => ['nullable', 'string'],
-            'detection_method' => ['nullable', 'string'],
-            'attachment' => ['nullable', 'string'],
-            //json array
-            'floor_process_visualization' => ['nullable', 'array'], 
+            'date_code' => ['nullable', 'string'],
         ];
     }
 }

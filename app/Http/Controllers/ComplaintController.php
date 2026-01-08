@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreComplaintRequest;
-use App\Http\Requests\UpdateComplaintRequest;
 use App\Http\Resources\ComplaintResource;
 use App\DTOs\ComplaintDTO;
 use Illuminate\Http\JsonResponse;
@@ -14,31 +13,35 @@ use Illuminate\Support\Str;
 
 class ComplaintController extends Controller
 {
-    // --- 1. INDEX: Lấy danh sách (kèm Join) ---
-    public function index(Request $request)
+    private function getBaseQuery()
     {
-        // Query cơ bản
-        $query = DB::table('complaints')
+        return DB::table('complaints')
             ->leftJoin('customers', 'complaints.customer_id', '=', 'customers.id')
             ->leftJoin('partners', 'complaints.partner_id', '=', 'partners.id')
             ->select(
-                'complaints.*', 
-                'customers.name as customer_name', 
-                'partners.name as partner_name'   
+                'complaints.*',
+                'customers.name as cust_name',
+                'customers.department as cust_department',
+                'customers.department_manager as cust_manager',
+                'customers.line_area as cust_line_area',
+                'partners.name as part_name',
+                'partners.country as part_country',
+                'partners.code as part_code',
+                'partners.contact as part_contact'
             )
             ->whereNull('complaints.deleted_at');
+    }
 
-        // Filter cơ bản
+    public function index(Request $request)
+    {
+        $query = $this->getBaseQuery();
+
         if ($request->has('type')) {
             $query->where('complaints.type', 'like', '%' . $request->query('type') . '%');
-        }
-        if ($request->has('customer_id')) {
-            $query->where('complaints.customer_id', $request->query('customer_id'));
         }
 
         $paginator = $query->orderBy('complaints.created_at', 'desc')->paginate(10);
 
-        // Transform
         $paginator->getCollection()->transform(function ($row) {
             return ComplaintDTO::fromDb($row);
         });
@@ -46,14 +49,10 @@ class ComplaintController extends Controller
         return ComplaintResource::collection($paginator);
     }
 
-    // --- 2. SHOW: Xem chi tiết ---
     public function show(string $id): JsonResponse
     {
-        $row = $this->findRowWithRelations($id);
-
-        if (!$row) {
-            return response()->json(['message' => 'Not found'], 404);
-        }
+        $row = $this->getBaseQuery()->where('complaints.id', $id)->first();
+        if (!$row) return response()->json(['message' => 'Not found'], 404);
 
         return response()->json([
             'success' => true,
@@ -61,23 +60,24 @@ class ComplaintController extends Controller
         ]);
     }
 
-    // --- 3. STORE: Tạo mới ---
     public function store(StoreComplaintRequest $request): JsonResponse
     {
         $data = $request->validated();
         $uuid = (string) Str::uuid();
 
-        // Map request data sang DB columns
+        // Encode JSON (Key đầu vào là snake_case)
+        $photosJson = isset($data['photos']) ? json_encode($data['photos']) : null;
+        $partnerPhotosJson = isset($data['partner_photos']) ? json_encode($data['partner_photos']) : null;
+
         $insertData = [
             'id' => $uuid,
             'type' => $data['type'],
             'complaint_no' => $data['complaint_no'] ?? null,
             'subject' => $data['subject'] ?? null,
-            
             'customer_id' => $data['customer_id'] ?? null,
             'partner_id' => $data['partner_id'] ?? null,
-            'five_why_id' => null, // Mặc định null, sẽ cập nhật khi tạo FiveWhy sau
             
+            // Map input snake_case -> db column snake_case
             'incident_type' => $data['incident_type'] ?? null,
             'category' => $data['category'] ?? null,
             'severity_level' => $data['severity_level'] ?? null,
@@ -90,20 +90,16 @@ class ComplaintController extends Controller
             'unit_qty_rejected' => $data['unit_qty_rejected'] ?? null,
             'date_code' => $data['date_code'] ?? null,
             
-            'date_occurrence' => $data['date_occurrence'] ?? null,
-            'date_detection' => $data['date_detection'] ?? null,
-            'date_report' => $data['date_report'] ?? null,
+            // Mapping ngày tháng
+            'date_occurrence' => $data['problem_occurrence'] ?? null,
+            'date_detection' => $data['problem_detection'] ?? null,
+            'date_report' => $data['report_time'] ?? null,
             
             'product_description' => $data['product_description'] ?? null,
             'detection_point' => $data['detection_point'] ?? null,
-            'photo' => $data['photo'] ?? null,
-            'detection_method' => $data['detection_method'] ?? null,
-            'attachment' => $data['attachment'] ?? null,
             
-            // Encode JSON
-            'floor_process_visualization' => isset($data['floor_process_visualization']) 
-                ? json_encode($data['floor_process_visualization']) 
-                : null,
+            'photo' => $photosJson,          
+            'attachment' => $partnerPhotosJson, 
             
             'created_at' => now(),
             'updated_at' => now(),
@@ -111,78 +107,11 @@ class ComplaintController extends Controller
 
         DB::table('complaints')->insert($insertData);
 
-        // Fetch lại kèm relations
-        $row = $this->findRowWithRelations($uuid);
+        $row = $this->getBaseQuery()->where('complaints.id', $uuid)->first();
 
         return response()->json([
             'success' => true,
             'data' => new ComplaintResource(ComplaintDTO::fromDb($row)),
         ], 201);
-    }
-
-    // --- 4. UPDATE: Cập nhật ---
-    public function update(UpdateComplaintRequest $request, string $id): JsonResponse
-    {
-        $existing = DB::table('complaints')->where('id', $id)->whereNull('deleted_at')->first();
-        if (!$existing) return response()->json(['message' => 'Not found'], 404);
-
-        $data = $request->validated();
-        $updateData = ['updated_at' => now()];
-
-        // List các cột được phép update
-        $fields = [
-            'type', 'complaint_no', 'subject', 'customer_id', 'partner_id',
-            'incident_type', 'category', 'severity_level', 'machine', 'report_completed_by',
-            'lot_code', 'product_code', 'unit_qty_audited', 'unit_qty_rejected', 'date_code',
-            'date_occurrence', 'date_detection', 'date_report',
-            'product_description', 'detection_point', 'photo', 'detection_method', 'attachment'
-        ];
-
-        foreach ($fields as $field) {
-            if (array_key_exists($field, $data)) {
-                $updateData[$field] = $data[$field];
-            }
-        }
-
-        // Xử lý riêng JSON
-        if (array_key_exists('floor_process_visualization', $data)) {
-            $updateData['floor_process_visualization'] = !empty($data['floor_process_visualization']) 
-                ? json_encode($data['floor_process_visualization']) 
-                : null;
-        }
-
-        DB::table('complaints')->where('id', $id)->update($updateData);
-
-        return response()->json([
-            'success' => true,
-            'data' => new ComplaintResource(ComplaintDTO::fromDb($this->findRowWithRelations($id))),
-        ]);
-    }
-
-    // --- 5. DESTROY: Xóa mềm ---
-    public function destroy(string $id): JsonResponse
-    {
-        $exists = DB::table('complaints')->where('id', $id)->whereNull('deleted_at')->exists();
-        if (!$exists) return response()->json(['message' => 'Not found'], 404);
-
-        DB::table('complaints')->where('id', $id)->update(['deleted_at' => now()]);
-
-        return response()->json(['success' => true, 'message' => 'Deleted successfully']);
-    }
-
-    // --- Helper: Find Row with Joins ---
-    private function findRowWithRelations(string $id)
-    {
-        return DB::table('complaints')
-            ->leftJoin('customers', 'complaints.customer_id', '=', 'customers.id')
-            ->leftJoin('partners', 'complaints.partner_id', '=', 'partners.id')
-            ->select(
-                'complaints.*', 
-                'customers.name as customer_name', 
-                'partners.name as partner_name'
-            )
-            ->where('complaints.id', $id)
-            ->whereNull('complaints.deleted_at')
-            ->first();
     }
 }
