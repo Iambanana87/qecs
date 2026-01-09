@@ -5,6 +5,7 @@ namespace App\DTOs;
 class ComplaintDTO
 {
     public function __construct(
+        public string $id,
         // General Info
         public ?string $subject,
         public ?string $complaintNo,
@@ -15,7 +16,7 @@ class ComplaintDTO
         public ?string $department,
         public ?string $manager,
         public ?string $lineArea,
-
+        
         // Incident Details
         public ?string $incidentType,
         public ?string $productDescription,
@@ -48,6 +49,7 @@ class ComplaintDTO
         public ?string $partnerCode,
         public ?string $partnerContact,
         public array $partnerPhotos,
+        public array $floorProcessVisualization,
     ) {}
 
     public static function fromDb(object $row): self
@@ -59,6 +61,7 @@ class ComplaintDTO
         };
 
         return new self(
+            id: $row->id,
             subject: $row->subject,
             complaintNo: $row->complaint_no,
             type: $row->type,
@@ -94,6 +97,7 @@ class ComplaintDTO
             partnerCode: $row->part_code ?? null,
             partnerContact: $row->part_contact ?? null,
             partnerPhotos: $decodeArray($row->attachment),
+            floorProcessVisualization: $decodeArray($row->floor_process_visualization),
         );
     }
 }

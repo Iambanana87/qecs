@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreComplaintRequest;
 use App\Http\Resources\ComplaintResource;
+use App\Http\Resources\ComplaintListResource;
 use App\DTOs\ComplaintDTO;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,16 +38,14 @@ class ComplaintController extends Controller
         $query = $this->getBaseQuery();
 
         if ($request->has('type')) {
-            $query->where('complaints.type', 'like', '%' . $request->query('type') . '%');
+            $query->where('complaints.type', $request->query('type'));
         }
 
         $paginator = $query->orderBy('complaints.created_at', 'desc')->paginate(10);
-
         $paginator->getCollection()->transform(function ($row) {
             return ComplaintDTO::fromDb($row);
         });
-
-        return ComplaintResource::collection($paginator);
+        return ComplaintListResource::collection($paginator);
     }
 
     public function show(string $id): JsonResponse
@@ -68,6 +67,10 @@ class ComplaintController extends Controller
         // Encode JSON (Key đầu vào là snake_case)
         $photosJson = isset($data['photos']) ? json_encode($data['photos']) : null;
         $partnerPhotosJson = isset($data['partner_photos']) ? json_encode($data['partner_photos']) : null;
+       
+        $floorProcessJson = isset($data['floor_process_visualization']) 
+            ? json_encode($data['floor_process_visualization']) 
+            : null;
 
         $insertData = [
             'id' => $uuid,
@@ -100,6 +103,8 @@ class ComplaintController extends Controller
             
             'photo' => $photosJson,          
             'attachment' => $partnerPhotosJson, 
+
+            'floor_process_visualization' => $floorProcessJson,
             
             'created_at' => now(),
             'updated_at' => now(),

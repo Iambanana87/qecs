@@ -12,6 +12,8 @@ class ComplaintResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
+            // UUID
+            'id' => $this->id,
             'general' => [
                 'subject' => $this->subject,
                 'complaint_no' => $this->complaintNo,
@@ -55,6 +57,8 @@ class ComplaintResource extends JsonResource
                 'partner_code' => $this->partnerCode,
                 'partner_contact' => $this->partnerContact,
                 'partner_photos' => $this->partnerPhotos, 
+
+                'floor_process_visualization' => $this->floorProcessVisualization,
             ]
         ];
     }

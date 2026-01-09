@@ -15,7 +15,7 @@ class StoreComplaintRequest extends FormRequest
     {
         return [
             // General
-            'type' => ['required', 'string', 'unique:complaints,type'],
+            'type' => ['required', 'string', \Illuminate\Validation\Rule::in(['client', 'supplier'])],
             'complaint_no' => ['nullable', 'string'],
             'subject' => ['nullable', 'string'],
             'customer_id' => ['nullable', 'uuid', 'exists:customers,id'],
@@ -49,6 +49,7 @@ class StoreComplaintRequest extends FormRequest
             'report_completed_by' => ['nullable', 'string'],
             'detection_point' => ['nullable', 'string'],
             'date_code' => ['nullable', 'string'],
+            'floor_process_visualization' => ['nullable', 'array'],
         ];
     }
 }
