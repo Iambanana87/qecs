@@ -37,6 +37,11 @@ class User
 
     public function getAllUsers()
     {
-        
+        $result = api_request(
+            'GET', 
+            '?c=UserController&m=getAllUsers',
+            [],
+        );
+		return $result;
     }
 }
