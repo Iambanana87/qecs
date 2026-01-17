@@ -46,6 +46,14 @@ return [
             'throw' => false,
             'report' => false,
         ],
+        'external_uploads' => [
+            'driver' => 'local',
+            // base_path() trỏ đến thư mục backend, '../uploads' sẽ nhảy ra ngoài backend và vào uploads
+            'root' => base_path('../uploads'), 
+            'url' => env('APP_URL') . '/uploads',
+            'visibility' => 'public',
+            'throw' => false,
+        ],
 
         's3' => [
             'driver' => 's3',

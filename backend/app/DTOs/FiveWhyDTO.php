@@ -2,11 +2,14 @@
 
 namespace App\DTOs;
 
+use Illuminate\Support\Collection;
+
 class FiveWhyDTO
 {
     public function __construct(
         public string $id,
         public string $complaintId,
+        
         public ?string $what,
         public ?string $where,
         public ?string $when,
@@ -14,33 +17,34 @@ class FiveWhyDTO
         public ?string $which,
         public ?string $how,
         public ?string $phenomenonDescription,
-        public array $photos, // Luôn trả về mảng (dù rỗng)
-        public ?string $createdAt,
-        public ?string $updatedAt,
+        
+        public string $createdAt,
+        public string $updatedAt,
+        
+        // Truyền vào danh sách toàn bộ file của record này
+        public Collection $attachments 
     ) {}
 
-    public static function fromDb(object $row): self
+    // Hàm fromDb nhận thêm tham số $attachments
+    public static function fromDb(object $row, Collection $attachments): self
     {
-        // Xử lý photos: DB lưu text/json -> PHP convert về mảng
-        $photos = [];
-        if (!empty($row->photos)) {
-            $decoded = json_decode($row->photos, true);
-            $photos = is_array($decoded) ? $decoded : [];
-        }
-
         return new self(
             id: $row->id,
             complaintId: $row->complaint_id,
+            
             what: $row->what,
             where: $row->where,
             when: $row->when,
             who: $row->who,
             which: $row->which,
             how: $row->how,
+            
             phenomenonDescription: $row->phenomenon_description,
-            photos: $photos,
+            
             createdAt: (string) $row->created_at,
             updatedAt: (string) $row->updated_at,
+            
+            attachments: $attachments // Truyền nguyên collection vào
         );
     }
 }

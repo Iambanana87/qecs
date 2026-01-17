@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Faker\Factory as Faker;
 
@@ -11,8 +12,31 @@ class DatabaseSeeder extends Seeder
 {
     public function run()
     {
+        // Tắt kiểm tra khóa ngoại để có thể truncate (xóa) dữ liệu cũ
+        Schema::disableForeignKeyConstraints();
+
+        $this->command->warn('Cleaning old data...');
+        // Danh sách các bảng cần xóa sạch trước khi seed
+        $tables = [
+            'User', 'Country', 'partners', 'customers',
+            'complaints', 'five_whys', 'attachments',
+            'Audit', 'QualityAlert', 'QualityAlertScope',
+            'corrective_actions', 'PostponeRecord',
+            'check_material_machines', 'check_parameters_operations',
+            'immediate_actions', 'five_m_analyses', 'why_why_analyses',
+            'preventive_actions', 'effectiveness_checks',
+            'AuditTrail', 'Notification'
+        ];
+
+        foreach ($tables as $table) {
+            DB::table($table)->truncate();
+        }
+
+        // Bật lại kiểm tra khóa ngoại
+        Schema::enableForeignKeyConstraints();
+
         $faker = Faker::create();
-        $limit = 50; // Số lượng record tối thiểu
+        $limit = 50; // Số lượng record
 
         $this->command->info('1. Seeding Independent Tables (Parents)...');
 
@@ -24,7 +48,7 @@ class DatabaseSeeder extends Seeder
             DB::table('User')->insert([
                 'id' => $id,
                 'name' => $faker->name,
-                'email' => $faker->unique()->safeEmail,
+                'email' => $faker->unique()->safeEmail, // Đảm bảo email duy nhất
                 'role' => $faker->jobTitle,
                 'avatar_url' => $faker->imageUrl(),
                 'status' => $faker->randomElement(['online', 'idle', 'offline', 'busy']),
@@ -44,15 +68,19 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
-        // 3. Seed Partners
+        // 3. Seed Partners (FIXED UNIQUE ERROR)
         $partnerIds = [];
         for ($i = 0; $i < $limit; $i++) {
             $id = Str::uuid()->toString();
             $partnerIds[] = $id;
+            
+            // Sử dụng unique() và tăng độ dài số để tránh trùng lặp: PART-#####
+            $code = strtoupper($faker->unique()->bothify('PART-#####')); 
+
             DB::table('partners')->insert([
                 'id' => $id,
                 'name' => $faker->company,
-                'code' => strtoupper($faker->bothify('PART-####')),
+                'code' => $code,
                 'country' => $faker->country,
                 'contact' => $faker->phoneNumber,
                 'created_at' => now(),
@@ -84,11 +112,12 @@ class DatabaseSeeder extends Seeder
         for ($i = 0; $i < $limit; $i++) {
             $id = Str::uuid()->toString();
             $complaintIds[] = $id;
+            
             DB::table('complaints')->insert([
                 'id' => $id,
-                // CHANGE: Type is now strictly 'client' or 'supplier'
-                'type' => $faker->randomElement(['client', 'supplier']), 
-                'complaint_no' => $faker->unique()->bothify('NO-####'), // Moved unique constraint here if needed
+                'type' => $faker->randomElement(['client', 'supplier']),
+                // Đảm bảo unique cho complaint_no
+                'complaint_no' => $faker->unique()->bothify('NO-#####'), 
                 'subject' => $faker->sentence,
                 'customer_id' => $faker->randomElement($customerIds),
                 'incident_type' => $faker->randomElement(['Safety', 'Quality', 'Environment']),
@@ -111,7 +140,7 @@ class DatabaseSeeder extends Seeder
                 'partner_id' => $faker->randomElement($partnerIds),
                 'attachment' => null,
                 'floor_process_visualization' => json_encode(['step1' => 'ok']),
-                'five_why_id' => null, 
+                'five_why_id' => null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -127,7 +156,7 @@ class DatabaseSeeder extends Seeder
                 'reference' => $faker->bothify('AUD-####'),
                 'subject' => $faker->sentence,
                 'type' => $faker->randomElement(['Internal_Audit', 'External_Audit']),
-                'standard_id' => Str::uuid()->toString(), 
+                'standard_id' => Str::uuid()->toString(),
                 'company' => $faker->company,
                 'stage' => $faker->randomElement(['Planned', 'In_Progress', 'Reporting', 'Closed']),
                 'external_ref_no' => $faker->bothify('EXT-####'),
@@ -175,7 +204,9 @@ class DatabaseSeeder extends Seeder
                 'which' => $faker->word,
                 'how' => $faker->sentence,
                 'phenomenon_description' => $faker->paragraph,
-                'photos' => $faker->imageUrl(),
+                // Lưu ý: bảng five_whys trong schema bạn gửi không có cột 'photos'
+                // Nếu schema thực tế có thì giữ lại, không thì xóa dòng dưới
+                // 'photos' => $faker->imageUrl(), 
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -185,16 +216,19 @@ class DatabaseSeeder extends Seeder
 
         // 9. Seed Attachments
         for ($i = 0; $i < $limit; $i++) {
+            // Lưu ý: Schema attachments bạn gửi dùng 'record_id' (uuid) và 'table_name' (string)
+            // Code cũ của bạn dùng 'record_type', 'file_url'. Cần sửa lại cho khớp Schema.
             DB::table('attachments')->insert([
                 'id' => Str::uuid()->toString(),
                 'record_id' => $faker->randomElement($complaintIds),
-                'record_type' => 'App\Models\Complaint',
-                'context' => 'evidence',
+                'table_name' => 'complaints', 
+                'section' => $faker->randomElement(['what', 'where', 'evidence']),
                 'file_name' => $faker->word . '.pdf',
-                'file_url' => $faker->url,
+                'file_path' => '/uploads/' . $faker->uuid . '.pdf', // Sửa từ file_url thành file_path theo schema
                 'file_type' => 'application/pdf',
                 'file_size' => $faker->numberBetween(1000, 50000),
-                'uploaded_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
         }
 
@@ -219,17 +253,20 @@ class DatabaseSeeder extends Seeder
         }
 
         // 11. Seed Postpone Records
-        foreach(array_slice($actionIds, 0, 20) as $actId) {
-            DB::table('PostponeRecord')->insert([
-                'id' => Str::uuid()->toString(),
-                'action_id' => $actId,
-                'requested_by' => $faker->randomElement($userIds),
-                'requested_date' => now(),
-                'old_due_date' => now(),
-                'new_due_date' => $faker->dateTimeBetween('+1 week', '+1 month'),
-                'reason' => $faker->sentence,
-                'status' => $faker->randomElement(['Waiting_for_Approval', 'Approved']),
-            ]);
+        if (!empty($actionIds)) {
+            // Chỉ seed nếu có action
+            foreach(array_slice($actionIds, 0, min(20, count($actionIds))) as $actId) {
+                DB::table('PostponeRecord')->insert([
+                    'id' => Str::uuid()->toString(),
+                    'action_id' => $actId,
+                    'requested_by' => $faker->randomElement($userIds),
+                    'requested_date' => now(),
+                    'old_due_date' => now(),
+                    'new_due_date' => $faker->dateTimeBetween('+1 week', '+1 month'),
+                    'reason' => $faker->sentence,
+                    'status' => $faker->randomElement(['Waiting_for_Approval', 'Approved', 'Rejected']), // Thêm Rejected cho đủ enum
+                ]);
+            }
         }
 
         // 12. Seed Other Analysis Tables

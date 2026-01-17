@@ -30,8 +30,8 @@ return new class extends Migration
             $table->dateTime('date_occurrence')->nullable();
             $table->dateTime('date_detection')->nullable();
             $table->dateTime('date_report')->nullable();
-            $table->text('product_description')->nullable();
-            $table->text('detection_point')->nullable();
+            $table->json('product_description')->nullable();
+            $table->json('detection_point')->nullable();
             $table->text('photo')->nullable();
             $table->text('detection_method')->nullable();
             

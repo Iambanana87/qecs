@@ -138,16 +138,32 @@ export interface Complaint {
   parametersOperationRows?: ParametersOperationRow[];
 
   // Section 5: Problem Description (5W1H)
+  {
+  id:
   problemDescription?: {
-    what: string;
-    where: string;
-    when: string;
-    who: string;
-    which: string;
-    how: string;
+    what:{
+      description: string;
+      attachment:[]
+    }
+    when:{
+      description: string;
+      attachment:[]
+    }
+    who:{
+      description: string;
+      attachment:[]
+    }
+    which:{
+      description: string;
+      attachment:[]
+    }
+    how:{
+      description: string;
+      attachment:[]
+    }
     phenomenonDescription: string;
-    sketch?: Attachment;
   };
+  }
 
   // Section 6: Immediate Actions
   immediateActions?: ActionRow[];

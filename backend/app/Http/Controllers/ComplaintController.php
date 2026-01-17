@@ -40,12 +40,23 @@ class ComplaintController extends Controller
         if ($request->has('type')) {
             $query->where('complaints.type', $request->query('type'));
         }
-
         $paginator = $query->orderBy('complaints.created_at', 'desc')->paginate(10);
+        
         $paginator->getCollection()->transform(function ($row) {
             return ComplaintDTO::fromDb($row);
         });
-        return ComplaintListResource::collection($paginator);
+
+        // Resource sẽ format từng item theo cấu trúc mới (id + general con)
+        $resource = ComplaintListResource::collection($paginator);
+
+        $response = $resource->response()->getData(true);
+
+        // Trả về JSON
+        return response()->json([
+            'data' => $response['data'],  
+            'links'   => $response['links'],
+            'meta'    => $response['meta'],
+        ]);
     }
 
     public function show(string $id): JsonResponse
@@ -54,7 +65,7 @@ class ComplaintController extends Controller
         if (!$row) return response()->json(['message' => 'Not found'], 404);
 
         return response()->json([
-            'success' => true,
+            // 'success' => true,
             'data' => new ComplaintResource(ComplaintDTO::fromDb($row)),
         ]);
     }
@@ -64,10 +75,8 @@ class ComplaintController extends Controller
         $data = $request->validated();
         $uuid = (string) Str::uuid();
 
-        // Encode JSON (Key đầu vào là snake_case)
         $photosJson = isset($data['photos']) ? json_encode($data['photos']) : null;
         $partnerPhotosJson = isset($data['partner_photos']) ? json_encode($data['partner_photos']) : null;
-       
         $floorProcessJson = isset($data['floor_process_visualization']) 
             ? json_encode($data['floor_process_visualization']) 
             : null;
@@ -79,41 +88,30 @@ class ComplaintController extends Controller
             'subject' => $data['subject'] ?? null,
             'customer_id' => $data['customer_id'] ?? null,
             'partner_id' => $data['partner_id'] ?? null,
-            
-            // Map input snake_case -> db column snake_case
             'incident_type' => $data['incident_type'] ?? null,
             'category' => $data['category'] ?? null,
             'severity_level' => $data['severity_level'] ?? null,
             'machine' => $data['machine'] ?? null,
             'report_completed_by' => $data['report_completed_by'] ?? null,
-            
             'lot_code' => $data['lot_code'] ?? null,
             'product_code' => $data['product_code'] ?? null,
             'unit_qty_audited' => $data['unit_qty_audited'] ?? null,
             'unit_qty_rejected' => $data['unit_qty_rejected'] ?? null,
             'date_code' => $data['date_code'] ?? null,
-            
-            // Mapping ngày tháng
             'date_occurrence' => $data['problem_occurrence'] ?? null,
             'date_detection' => $data['problem_detection'] ?? null,
             'date_report' => $data['report_time'] ?? null,
-            
             'product_description' => $data['product_description'] ?? null,
             'detection_point' => $data['detection_point'] ?? null,
-            
             'photo' => $photosJson,          
             'attachment' => $partnerPhotosJson, 
-
             'floor_process_visualization' => $floorProcessJson,
-            
             'created_at' => now(),
             'updated_at' => now(),
         ];
 
         DB::table('complaints')->insert($insertData);
-
         $row = $this->getBaseQuery()->where('complaints.id', $uuid)->first();
-
         return response()->json([
             'success' => true,
             'data' => new ComplaintResource(ComplaintDTO::fromDb($row)),
